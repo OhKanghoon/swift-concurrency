@@ -238,3 +238,11 @@ SwiftUI 의 `task(_:)` 는 뷰가 사라질 때 비동기 코드를 취소합니
 취소에 대한 에러를 처리해야 하는 경우 catch 에서 처리를 해주면 됩니다. 예제의 경우 URLError 의 code 가 cancelled 인 것을 확인하였습니다. 
 
 Task.sleep 과 같은 최신 비동기 API 에는 CancellationError 에러를 발생시킵니다. 커스텀 에러를 발생시키는 경우 URLSession 처럼 취소와 관련된 에러코드가 존재합니다.
+
+## 스터디에 사용된 추가 자료
+
+- [Swift Concurrency 최소 버전 이야기](https://forums.swift.org/t/will-swift-concurrency-deploy-back-to-older-oss/49370/77)
+- [Concurrency Asynchronous Functions](https://forums.swift.org/t/concurrency-asynchronous-functions/41619/43)
+- [Async Sequence Proposal](https://github.com/apple/swift-evolution/blob/main/proposals/0298-asyncsequence.md)
+- [WWDC-Swift concurrency: Behind the scenes](https://developer.apple.com/videos/play/wwdc2021/10254/)
+- [Apple Doc - AsyncStream](https://developer.apple.com/documentation/swift/asyncstream)
