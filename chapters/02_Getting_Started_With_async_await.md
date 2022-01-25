@@ -133,7 +133,329 @@ Modern Concurrency 의 중요한 신규 기능 중 하나는 비동기 코드의
 
 Modern Swift Concurrency Model 에서 반복되는 토픽은 안전함(safety), 최적화된 리소스 사용(optimized resource usage), 최소 구문(minimal syntax) 입니다. 뒤에서는 새로운 API 에 대해 자세히 알아보고 사용해보겠습니다.
 
+## async / await 문법 살펴보기
 
+async 키워드는 함수 바로 다음에 올 수 있습니다.
+
+await 은 호출하려는 함수 앞에 위치하고 throwable (에러를 반환) 하다면 await 앞에 try 를 사용합니다.
+
+```swift
+func myFunction() async throws -> String { 
+  ... 
+}
+
+let myVar = try await myFunction()
+```
+
+computed property 에 async 키워드를 작성하는 경우, 아래처럼 사용할 수 있습니다.
+
+```swift
+var myProperty: String {
+  get async {
+    ...
+  }
+}
+
+print(await myProperty)
+```
+
+클로저에 async 를 붙이는 경우
+
+```swift
+func myFunction(worker: (Int) async -> Int) -> Int { 
+  ... 
+}
+
+myFunction {
+  return await computeNumbers($0)
+}
+```
+
+## 서버에서 파일 가져오기
+
+### Server Request 만들기
+
+웹서버에서 JSON 파일을 가져오는 기능을 개발합니다. ([SuperStorageModel.swift](https://github.com/raywenderlich/mcon-materials/blob/editions/1.0/02-beginner-async-await/projects/final/SuperStorage/Model/SuperStorageModel.swift) 파일 참고)
+
+```swift
+func availableFiles() async throws -> [DownloadFile] {
+  guard let url = URL(string: "http://localhost:8080/files/list") else {
+    throw "Could not create the URL."
+  }
+  
+  let (data, response) = try await URLSession.shared.data(from: url)
+}
+```
+
+URLSession async data 함수를 사용해서 웹서버에서 응답이 오기 전까지 해당 쓰레드에서 다른 작업을 수행할 수 있도록 만들 수 있습니다.
+
+await 은 다음을 의미합니다.
+
+- 현재 코드가 실행을 중단합니다.
+- 시스템 부하에 따라 대기중인 메서드는 즉시 또는 나중에 실행됩니다. 더 우선순위가 높은 Task 가 있다면 기다려야할 수 있습니다.
+- 메서드 혹은 하위 Task 중 하나가 에러를 발생시키면, 에러는 call hierarchy 를 가장 가까운 catch 문으로 올립니다.
+
+await 을 사용하면 런타임의 central dispatch system 을 통해 모든 비동기 호출을 이동시키는데, 이는 다음과 같습니다.
+
+- 우선순위 지정
+- 취소 전파
+- 에러 올리기
+
+### 응답 상태 확인하기
+
+- [예제 코드](https://github.com/raywenderlich/mcon-materials/blob/d2916bebbf69895a34a96575a98a1ff3002cd348/02-beginner-async-await/projects/final/SuperStorage/Model/SuperStorageModel.swift#L105)
+
+```swift
+guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+  throw "The server responded with an error."
+}
+
+guard let list = try? JSONDecoder()
+  .decode([DownloadFile].self, from: data) else {
+  throw "The server response was not recognized."
+}
+```
+
+비동기 호출이 완료되고 서버 응답을 반환하면, 응답 상태를 확인해 Data 를 디코딩할 수 있습니다.
+
+위 소스코드를 보면 status code 200 을 확인하고, JSONDecoder 를 활용해 [DownloadFile] 로 디코딩하고 있습니다.
+
+### 파일 목록 반환하기
+
+반환은 간단합니다.
+
+메서드의 실행은 비동기적이지만, 코드는 동기적으로 읽을 수 있어 동작을 유추하기 쉽습니다.
+
+```swift
+return list
+```
+
+### 목록 보여주기
+
+- [예제 코드(ListView.swift)](https://github.com/raywenderlich/mcon-materials/blob/editions/1.0/02-beginner-async-await/projects/starter/SuperStorage/ListView.swift) 에 다음 코드를 추가해봅시다.
+
+```swift
+.task {
+  guard files.isEmpty else { return }
+  
+  do {
+    files = try await model.availableFiles()
+  } catch {
+    lastErrorMessage = error.localizedDescription
+  }
+}
+```
+
+파일 목록이 있는지 확인하고, 없다면 `availableFiles()` 를 호출해 가져옵니다.
+
+에러가 발생했다면 lastErrorMessage 에 에러를 할당합니다. 그러면 alert 에서 에러 메시지를 표시합니다.
+
+## 서버의 상태 얻기
+
+서버의 상태를 가져오고, 사용자의 사용 한도를 가져옵니다.
+
+```swift
+func status() async throws -> String {
+  guard let url = URL(string: "http://localhost:8080/files/status") else {
+    throw "Could not create the URL."  
+  }
+  
+  let (data, response) = try await URLSession.shared.data(from: url, delegate: nil)
+  
+  guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+    throw "The server responded with an error."
+  }
+  
+	return String((decoding: data, as: UTF8.self)
+}
+```
+
+서버 응답이 성공하면 String 을 반환합니다.
+
+이전 예제와 동일하게 데이터를 비동기적으로 가져오고, status code 를 확인합니다.
+
+그 이후 String 으로 디코딩하여 반환합니다.
+
+### 서버 상태 보여주기
+
+ListView.swift 의 task 안에 아래 코드를 추가합니다.
+
+footer 영역에서 status 가 보여지는 것을 확인할 수 있습니다.
+
+```swift
+status = try await model.status()
+```
+
+## 비동기 호출 그룹화하기
+
+지금까지 ListView.swift 의 task 안에 작성한 코드를 살펴봅시다.
+
+```swift
+files = try await model.availableFiles()
+status = try await model.status()
+```
+
+두 호출은 비동기적이고 이론적으로는 동시에 발생할 수 있습니다.
+
+하지만 await 으로 사용하게 되면 `availableFiles()`에 대한 요청이 완료될 때까지 `status()` 호출이 시작되지 않습니다.
+
+![02-async-group-1](./images/02-async-group-1.png)
+
+첫번째 호출의 반환값을 두번째 호출의 파라미터로 사용하려는 경우, 위 사진처럼 순차적으로 비동기 함수를 실행해야합니다.
+
+하지만 여기서는 그렇지 않습니다.
+
+서버 상태와 파일 목록은 서로 의존적이지 않기 때문에 두 호출은 동시에 할 수 있습니다.
+
+Swift 는 structured concurrency 의 `async let` 구문을 이용해 이 문제를 해결할 수 있습니다.
+
+### async let 사용하기
+
+Swift 는 여러 비동기 호출을 그룹화해서 한 번에 기다릴 수 있는 구문을 제공합니다.
+
+task 안의 코드를 모두 제거하고, `async let` 구문을 사용해봅시다.
+
+```swift
+guard files.isEmpty else { return }
+
+do {
+  async let files = try model.availableFiles()
+  async let status = try model.status()
+} catch {
+  lastErrorMessage = error.localizedDescription
+}
+```
+
+`async let` 바인딩을 사용하면 다른 언어의 promise 개념과 유사한 지역 상수를 만들 수 있습니다.
+
+files, status 바인딩은 특정 타입의 값이나 에러를 나중에 사용가능하다고 약속합니다.
+
+바인딩 결과를 읽으려면 `await` 을 사용해야 합니다. 이미 사용 가능한 값이라면 즉시 받을 수 있고, 그렇지 않다면 결과가 사용가능해질 때까지 일시 중단됩니다.
+
+다음 사진은 값을 즉시 얻어오는 상황과, 중단된 상황에 대한 설명입니다.
+
+![02-async-group-2](./images/02-async-group-2.png)
+
+### 두 요청에서 값 추출하기
+
+마지막으로 추가한 코드를 보면 `await` 을 호출하기 전에 두 async 코드가 실행됩니다. 따라서 `status()` 와 `availableFiles()` 는 task 안에서 main 코드와 병렬로 실행됩니다.
+
+두 비동기 코드를 그룹화해서 값을 가져오는 방식은 두가지 입니다.
+
+- Collection (e.g Array) 로 그룹화합니다.
+- 튜플로 그룹화합니다.
+
+두 문법은 상호 교환 가능합니다. 예제에서는 바인딩이 두 개이므로 튜플을 사용합니다.
+
+```swift
+let (filesResult, statusResult) = try await (files, status)
+```
+
+## 비동기로 파일 다운로드 하기
+
+[SuperStorageModel.swift](https://github.com/raywenderlich/mcon-materials/blob/editions/1.0/02-beginner-async-await/projects/starter/SuperStorage/Model/SuperStorageModel.swift) 파일의  `download(file:)` 라는 메서드를 살펴봅시다. 
+
+다운로드를 위한 endpoint URL 을 생성하고, 빈 데이터를 반환하고 있습니다.
+
+SuperStorageModel 에는 앱 다운로드를 관리하는 두 개의 메서드가 있습니다.
+
+- addDownload(name:) : 진행 중인 다운로드 목록에 파일을 추가합니다.
+- updateDownload(name:progress:) : 파일의 progress 를 업데이트합니다.
+
+이 두가지 메서드를 사용해 모델과 UI 를 업데이트합니다.
+
+### 데이터 다운로드
+
+`download(file:)` 에 다음 코드를 추가합니다.
+
+```swift
+addDownload(name: file.name)
+
+let (data, response) = try await URLSession.shared.data(from: url, delegate: nil)
+  
+updateDownload(name: file.name, progress: 1.0)
+
+guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+  throw "The server responded with an error."
+}
+
+return data
+```
+
+`addDownload` 은 모델 클래스의 download 속성에 파일을 추가합니다. DownloadView 는 이를 진행 중인 다운로드 상태를 화면에 표시하는데 사용합니다.
+
+다음 URLSession 을 활용해 데이터를 불러오고, `updateDownload` 를 사용해 진행률을 1.0 으로 업데이트 합니다.
+
+여기서 진행률은 0% 에서 바로 100% 로 업데이트하기 때문에 유용하지 않습니다. 다음 챕터에서 이 기능을 개선할 예정입니다.
+
+### 다운로드 버튼
+
+![02-download-button](./images/02-download-button.png)
+
+
+
+Silver 버튼에 대한 동작을 구현해야 합니다.
+
+지금까지는 SwiftUI 의 task() 를 활용했습니다. 그러나 비동기 코드를 허용하지 않는 downloadSingleAction 클로저 내에서 어떻게 `download(file:)` 을 사용할 수 있을까요?
+
+```swift
+fileData = try await model.download(file: file)
+```
+
+![02-download-error](./images/02-download-error.png)
+
+위 코드를 바로 사용하게 되면 위와 같은 에러가 발생합니다. 코드는 `() async throws -> Void` 타입이지만, 파라미터는 `() -> Void` 를 동기 클로저 타입을 기대합니다.
+
+실행 가능한 방법 중 하나는 FileDetails 에서 async closure 를 허용하도록 변경하는 것입니다. 하지만 이 코드에 접근할 수 없다면 어떻게 할 수 있을까요? 다행히 다른 방법이 있습니다.
+
+## non-async 컨텍스트에서 비동기 요청 실행하기
+
+```swift
+Task {
+  fileData = try await model.download(file: file)
+}
+```
+
+기존 코드를 위처럼 변경합니다.
+
+여기서 사용한 `Task` 타입은 무엇일까요?
+
+## Task 알아보기
+
+`Task` 는 최상위 비동기 작업을 나타내는 타입입니다. 최상위 수준은 sync context 에서 시작할 수 있는 async context 를 만들 수 있다는 것을 의미합니다.
+
+간단히 말해서, sync context 에서 비동기 코드를 실행하려고 할 때 새로운 Task 가 필요합니다.
+
+다음 API 를 사용해서 작업 실행을 수동으로 제어할 수 있습니다.
+
+- **Task(priority:operation)** : 지정된 우선 순위로 비동기 실행을 위한 작업을 예약합니다. 지정된 우선순위를 nil로 설정하면 현재 sync context 에서 기본값을 상속합니다.
+- **Task.detached(priority:operation)** : 호출 context 의 기본값을 상속하지 않는다는 점을 제외하고 Task(priority:operation) 와 유사합니다.
+- **Task.value** : 작업이 완료될 때까지 기다리고, 값을 반환합니다. (다른 언어의 Promise 와 유사)
+- **Task.isCancelled **: 마지막 중단 지점 이후 작업이 취소된 경우 true 를 반환합니다. 이 값을 통해 예약된 작업의 실행을 중단해야 하는 시점을 알 수 있습니다.
+- **Task.checkCancellation()** : 작업이 취소된 경우 CancellationError 를 발생시킵니다.
+- **Task.sleep(nanoseconds:)** : 쓰레드를 블락하지 않고 nanoseconds 만큼 기다립니다.
+
+이전 예제에서 `Task(priority:operation:)` 를 사용했습니다. 기본적으로 Task 는 현재 context 에서 우선 순위를 상속하기 때문에 생략할 수 있습니다. 우선 순위를 변경하려는 경우 priority 를 지정하면 됩니다.
+
+### 다른 Actor 로 부터 새로운 Task 만들기
+
+- 작성중..
+
+## 메인 스레드로 코드를 라우팅하기
+
+- 작성중..
+
+### @MainActor 사용하기
+
+- 작성중..
+
+### 비동기로 메서드 실행하기
+
+- 작성중..
+
+## 다운로드 화면 업데이트하기
+
+- 작성중..
 
 ---
 
