@@ -299,7 +299,7 @@ status = try await model.status()
 
 하지만 await 으로 사용하게 되면 `availableFiles()`에 대한 요청이 완료될 때까지 `status()` 호출이 시작되지 않습니다.
 
-![02-async-group-1](./images/02-async-group-1.png)
+<img src="./images/02-async-group-1.png">
 
 첫번째 호출의 반환값을 두번째 호출의 파라미터로 사용하려는 경우, 위 사진처럼 순차적으로 비동기 함수를 실행해야합니다.
 
@@ -334,7 +334,7 @@ files, status 바인딩은 특정 타입의 값이나 에러를 나중에 사용
 
 다음 사진은 값을 즉시 얻어오는 상황과, 중단된 상황에 대한 설명입니다.
 
-![02-async-group-2](./images/02-async-group-2.png)
+<img src="./images/02-async-group-2.png">
 
 ### 두 요청에서 값 추출하기
 
@@ -390,9 +390,7 @@ return data
 
 ### 다운로드 버튼
 
-![02-download-button](./images/02-download-button.png)
-
-
+<img src="./images/02-download-button.png">
 
 Silver 버튼에 대한 동작을 구현해야 합니다.
 
@@ -402,7 +400,7 @@ Silver 버튼에 대한 동작을 구현해야 합니다.
 fileData = try await model.download(file: file)
 ```
 
-![02-download-error](./images/02-download-error.png)
+<img src="./images/02-download-error.png">
 
 위 코드를 바로 사용하게 되면 위와 같은 에러가 발생합니다. 코드는 `() async throws -> Void` 타입이지만, 파라미터는 `() -> Void` 를 동기 클로저 타입을 기대합니다.
 
@@ -431,7 +429,7 @@ Task {
 - **Task(priority:operation)** : 지정된 우선 순위로 비동기 실행을 위한 작업을 예약합니다. 지정된 우선순위를 nil로 설정하면 현재 sync context 에서 기본값을 상속합니다.
 - **Task.detached(priority:operation)** : 호출 context 의 기본값을 상속하지 않는다는 점을 제외하고 Task(priority:operation) 와 유사합니다.
 - **Task.value** : 작업이 완료될 때까지 기다리고, 값을 반환합니다. (다른 언어의 Promise 와 유사)
-- **Task.isCancelled **: 마지막 중단 지점 이후 작업이 취소된 경우 true 를 반환합니다. 이 값을 통해 예약된 작업의 실행을 중단해야 하는 시점을 알 수 있습니다.
+- **Task.isCancelled** : 마지막 중단 지점 이후 작업이 취소된 경우 true 를 반환합니다. 이 값을 통해 예약된 작업의 실행을 중단해야 하는 시점을 알 수 있습니다.
 - **Task.checkCancellation()** : 작업이 취소된 경우 CancellationError 를 발생시킵니다.
 - **Task.sleep(nanoseconds:)** : 쓰레드를 블락하지 않고 nanoseconds 만큼 기다립니다.
 
