@@ -39,13 +39,17 @@ final class ViewModel {
 이는 간단하지만, 의도를 모호하게 만들며, 여러 에러를 만들어 낼 수 있습니다. 
 ex) completion 호출에 대해 검증할 수 없습니다.
 
-Swift 는 Objective-C 를 위해 디자인된 GCD 에 의존했기 때문에, 처음부터 언어 디자인에 비동기성을 통합하기 어려웠습니다. Objective-C 의 경우 언어가 시작된 수년 후인 iOS 4 에 블록(Swift 의 클로저와 유사함)이 도입되었습니다.
+Swift 는 Objective-C 를 위해 디자인된 GCD 에 의존했기 때문에, 처음부터 언어 디자인에 비동기성을 통합하기 어려웠습니다.
+
+Objective-C 의 경우 언어가 시작된 수년 후인 iOS 4 에 블록(Swift 의 클로저와 유사함)이 도입되었습니다.
 
 다시 위의 예제를 살펴보겠습니다.
 
 1. 먼저 컴파일러는 `fetch()` 내에서 completion 의 호출횟수를 알 수 있는 방법이 없습니다. 따라서 메모리 사용과 수명을 최적화할 수 없습니다.
 2. 해당 코드를 사용할 때 약한참조(weak)를 이용해 메모리를 직접 관리해야 합니다.
 3. 컴파일러는 에러를 핸들링했는지 알 수 없습니다. completion 핸들러를 호출하지 않거나 에러를 핸들링하지 않으면 문제가 발생할 수 있습니다.
+
+---
 
 Swift 의 Modern Concurrency Model 은 컴파일러와 런타임 모두와 긴밀하게 동작해 위의 문제를 포함한 많은 문제들을 해결합니다.
 
@@ -357,7 +361,7 @@ let (filesResult, statusResult) = try await (files, status)
 
 다운로드를 위한 endpoint URL 을 생성하고, 빈 데이터를 반환하고 있습니다.
 
-SuperStorageModel 에는 앱 다운로드를 관리하는 두 개의 메서드가 있습니다.
+`SuperStorageModel` 에는 앱 다운로드를 관리하는 두 개의 메서드가 있습니다.
 
 - addDownload(name:) : 진행 중인 다운로드 목록에 파일을 추가합니다.
 - updateDownload(name:progress:) : 파일의 progress 를 업데이트합니다.
@@ -394,7 +398,9 @@ return data
 
 Silver 버튼에 대한 동작을 구현해야 합니다.
 
-지금까지는 SwiftUI 의 task() 를 활용했습니다. 그러나 비동기 코드를 허용하지 않는 downloadSingleAction 클로저 내에서 어떻게 `download(file:)` 을 사용할 수 있을까요?
+지금까지는 SwiftUI 의 task() 를 활용했습니다. 
+
+비동기 코드를 허용하지 않는 downloadSingleAction 클로저에서는 어떻게 `download(file:)` 을 사용할 수 있을까요?
 
 ```swift
 fileData = try await model.download(file: file)
@@ -402,9 +408,13 @@ fileData = try await model.download(file: file)
 
 <img src="./images/02-download-error.png">
 
-위 코드를 바로 사용하게 되면 위와 같은 에러가 발생합니다. 코드는 `() async throws -> Void` 타입이지만, 파라미터는 `() -> Void` 를 동기 클로저 타입을 기대합니다.
+위 코드를 바로 사용하게 되면 위와 같은 에러가 발생합니다. 
 
-실행 가능한 방법 중 하나는 FileDetails 에서 async closure 를 허용하도록 변경하는 것입니다. 하지만 이 코드에 접근할 수 없다면 어떻게 할 수 있을까요? 다행히 다른 방법이 있습니다.
+코드는 `() async throws -> Void` 타입이지만, 파라미터는 `() -> Void` 를 동기 클로저 타입을 기대합니다.
+
+실행 가능한 방법 중 하나는 FileDetails 에서 async closure 를 허용하도록 변경하는 것입니다. 
+
+하지만 이 코드에 접근할 수 없다면 어떻게 할 수 있을까요? 다행히 다른 방법이 있습니다.
 
 ## non-async 컨텍스트에서 비동기 요청 실행하기
 
@@ -433,30 +443,85 @@ Task {
 - **Task.checkCancellation()** : 작업이 취소된 경우 CancellationError 를 발생시킵니다.
 - **Task.sleep(nanoseconds:)** : 쓰레드를 블락하지 않고 nanoseconds 만큼 기다립니다.
 
-이전 예제에서 `Task(priority:operation:)` 를 사용했습니다. 기본적으로 Task 는 현재 context 에서 우선 순위를 상속하기 때문에 생략할 수 있습니다. 우선 순위를 변경하려는 경우 priority 를 지정하면 됩니다.
+이전 예제에서 `Task(priority:operation:)` 를 사용했습니다. 
+
+기본적으로 Task 는 현재 context 에서 우선 순위를 상속하기 때문에 생략할 수 있습니다.
+
+우선 순위를 변경하려는 경우 priority 를 지정하면 됩니다.
 
 ### 다른 Actor 로 부터 새로운 Task 만들기
 
-- 작성중..
+`Task(priority:operation:)` 를 사용하면 task 를 호출한 actor 에서 실행됩니다.
 
-## 메인 스레드로 코드를 라우팅하기
+actor 의 일부가 아닌 동일한 Task 를 생성하려면 `Task.detached(priority:operation:)` 를 사용하면 됩니다.
 
-- 작성중..
+> 참고 : actor 는 이후 챕터에서 다룰 예정입니다.
+
+지금은 코드가 메인 쓰레드에서 Task 를 생성할 때, 해당 Task 는 메인 쓰레드에서 실행된다고 이해하면 됩니다. 
+
+따라서 앱의 UI 를 안전하게 업데이트할 수 있습니다.
+
+앱을 실행해서 JPEG 파일을 선택하고 Silver plan 버튼을 클릭하면, progress 가 표시되고 이미지의 프리뷰가 표시됩니다.
+
+<img src="./images/02-create-task-on-actor.png">
+
+그러나 progress 가 흔들리고 때때로 중간까지만 채워지는 것을 확인할 수 있습니다.
+
+이를 통해 백그라운드 쓰레드에서 UI 를 업데이트하고 있다는 것을 알 수 있습니다. Xcode 콘솔을 보면 로그 메시지와 함께 보라색 경고를 볼 수 있습니다.
+
+## 메인 쓰레드에서 코드를 동작시키기
+
+`MainActor.run()` 를 사용해 코드를 메인 쓰레드에서 동작시킬 수 있습니다.
+
+`MainActor` 는 메인 쓰레드에서 코드를 실행하는 타입입니다. 이것은 기존에 사용했던 `DispatchQueue.main` 의 대안입니다.
+
+`MainActor.run()` 를 자주 사용하면 코드에 클로저가 많아져 가독성이 떨어집니다.
+
+좀 더 좋은 방법은 `@MainActor` annotation 을 사용하는 것입니다. 이를 사용하면 주어진 함수나 프로퍼티의 호출을 자동으로 메인쓰레드로 전환합니다.
 
 ### @MainActor 사용하기
 
-- 작성중..
+메인 쓰레드에서 UI 변경이 일어나도록 [SuperStorageModel.swift](https://github.com/raywenderlich/mcon-materials/blob/editions/1.0/02-beginner-async-await/projects/starter/SuperStorage/Model/SuperStorageModel.swift) 파일의 다운로드를 업데이트 하는 메서드에 annotation 을 추가합니다.
+
+```swift
+@MainActor func addDownload(name: String)
+
+@MainActor func updateDownload(name: String, progress: Double)
+```
+
+이 두 메서드에 대한 모든 호출은 메인 액터, 즉 메인 쓰레드에서 자동으로 실행됩니다.
 
 ### 비동기로 메서드 실행하기
 
-- 작성중..
+위 변경으로 컴파일 에러가 발생합니다.
+
+두 메서드를 특정 Actor 에서 실행하려면 비동기적으로 호출해야 합니다.
+
+addDownload, updateDownload 를 사용하는 코드에 await 을 추가하면 에러가 해결됩니다.
+
+```swift
+await addDownload(name: file.name)
+
+await updateDownload(name: file.name, progress: 1.0)
+```
 
 ## 다운로드 화면 업데이트하기
 
-- 작성중..
+현재까지 작성한 코드에 문제가 있습니다.
+
+파일 목록 화면으로 돌아가서, 다른 파일을 선택하면 다운로드 화면에 이전 다운로드 progress 가 계속 표시됩니다.
+
+`onDisappear()` 에서 모델을 초기화 해서이 문제를 해결할 수 있습니다. [DownloadView.swift](https://github.com/raywenderlich/mcon-materials/blob/editions/1.0/02-beginner-async-await/projects/starter/SuperStorage/DownloadView.swift) 의 toolbar 아래에 코드를 추가해 봅시다.
+
+```swift
+.onDisappear {
+  fileData = nil
+  model.reset()
+}
+```
 
 ---
 
-이미지 리소스 출처 및 원문
+### 이미지 리소스 출처 및 원문
 
 - https://www.raywenderlich.com/books/modern-concurrency-in-swift/v1.0/chapters/2-getting-started-with-async-await
